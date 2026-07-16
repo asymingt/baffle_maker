@@ -1,0 +1,12 @@
+load("@baffle_maker_py_deps//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary")
+
+py_binary(
+    name = "app",
+    srcs = ["waffle.py"],
+    main = "waffle.py",
+    imports = ["."],
+    deps = [
+        requirement("pygithub"),
+    ],
+)
