@@ -3,6 +3,10 @@ on:
   push:
     branches:
       - main
+  schedule:
+    # 9AM PST (UTC-8) every Thursday. GitHub Actions cron is always UTC and
+    # doesn't shift for daylight saving, so this runs at 10AM PDT in summer.
+    - cron: '0 17 * * 4'
   workflow_dispatch:
     inputs:
       publish_to_pages:
@@ -30,24 +34,40 @@ jobs:
           bazelisk-cache: false
           disk-cache: false
           repository-cache: false
-      - name: Regenerate waffle
+      - name: Determine data file paths
+        id: paths
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          echo "raw=$GITHUB_WORKSPACE/site/${DATE}.yaml" >> "$GITHUB_OUTPUT"
+          echo "analyzed=$GITHUB_WORKSPACE/site/${DATE}_analyzed.yaml" >> "$GITHUB_OUTPUT"
+      - name: Query GitHub for open pull requests (MODEL)
         env:
           GITHUB_API_TOKEN: ${{ secrets.WAFFLE_API_TOKEN }}
           USE_BAZEL_VERSION: 9.1.1
         run: |
-          bazel run //waffle:app
+          bazel run //waffle:query -- "${{ steps.paths.outputs.raw }}"
+      - name: Classify contributors (CONTROLLER)
+        env:
+          USE_BAZEL_VERSION: 9.1.1
+        run: |
+          bazel run //waffle:analyze -- "${{ steps.paths.outputs.raw }}"
+      - name: Render the baffle board (VIEW)
+        env:
+          USE_BAZEL_VERSION: 9.1.1
+        run: |
+          bazel run //waffle:render -- "${{ steps.paths.outputs.analyzed }}"
       - name: Setup Pages
-        if: github.event_name == 'push' || inputs.publish_to_pages == true
+        if: github.event_name == 'push' || github.event_name == 'schedule' || inputs.publish_to_pages == true
         uses: actions/configure-pages@v5
       - name: Upload site artifact
-        if: github.event_name == 'push' || inputs.publish_to_pages == true
+        if: github.event_name == 'push' || github.event_name == 'schedule' || inputs.publish_to_pages == true
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
     needs: call-api
-    if: github.event_name == 'push' || inputs.publish_to_pages == true
+    if: github.event_name == 'push' || github.event_name == 'schedule' || inputs.publish_to_pages == true
     runs-on: ubuntu-latest
     environment:
       name: github-pages
