@@ -10,6 +10,12 @@ on:
         required: true
         type: boolean
         default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   call-api:
     runs-on: ubuntu-latest
@@ -23,10 +29,30 @@ jobs:
         with:
           bazelisk-cache: false
           disk-cache: false
-          repository-cache: false          
+          repository-cache: false
       - name: Regenerate waffle
         env:
           GITHUB_API_TOKEN: ${{ secrets.WAFFLE_API_TOKEN }}
           USE_BAZEL_VERSION: 9.1.1
         run: |
           bazel run //waffle:app
+      - name: Setup Pages
+        if: github.event_name == 'push' || inputs.publish_to_pages == true
+        uses: actions/configure-pages@v5
+      - name: Upload site artifact
+        if: github.event_name == 'push' || inputs.publish_to_pages == true
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: call-api
+    if: github.event_name == 'push' || inputs.publish_to_pages == true
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
