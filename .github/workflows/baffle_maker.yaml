@@ -1,0 +1,31 @@
+name: Make a baffle!
+on:
+  workflow_dispatch:
+    inputs:
+      publish_to_pages:
+        description: 'Publish the result to pages'
+        required: true
+        type: boolean
+        default: false
+jobs:
+  call-api:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Setup Bazel
+        uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: false
+          disk-cache: false
+          repository-cache: false          
+      - name: Regenerate waffle
+        env:
+          GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USE_BAZEL_VERSION: 9.1.1
+        run: |
+          bazel run //waffle:app
