@@ -89,7 +89,7 @@ def render_row(row, users, icon_sm, row_number):
         <td class="col-author" title="{tooltip}"><a href="{html.escape(author_url)}" target="_blank" rel="noopener">@{html.escape(author)}</a>{maintainer_badge}</td>
         <td class="col-ai" title="{attestation_label}">{attestation_icon}</td>
         <td class="col-updated">{parse_iso(row['updated']).strftime('%b %d, %Y')}</td>
-        <td class="col-icon"><div class="waffle-container">{icon_sm}<input type="checkbox"></div></td>
+        <td class="col-icon"><div class="waffle-container">{icon_sm}<input type="checkbox" data-url="{html.escape(row['url'])}"></div></td>
       </tr>'''
 
 
@@ -339,6 +339,24 @@ def render_html(data, generated_at):
     {icon_sm}{icon_sm}{icon_sm}
     <p>Generated {generated_at.strftime('%b %d, %Y %H:%M UTC')} by <code>baffle_maker</code>.</p>
   </footer>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {{
+      const checkboxes = document.querySelectorAll('.waffle-container input[type="checkbox"]');
+      checkboxes.forEach(cb => {{
+        const url = cb.getAttribute('data-url');
+        if (localStorage.getItem(url) === 'true') {{
+          cb.checked = true;
+        }}
+        cb.addEventListener('change', (e) => {{
+          if (e.target.checked) {{
+            localStorage.setItem(url, 'true');
+          }} else {{
+            localStorage.removeItem(url);
+          }}
+        }});
+      }});
+    }});
+  </script>
 </body>
 </html>
 '''
