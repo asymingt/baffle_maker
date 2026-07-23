@@ -82,9 +82,10 @@ def render_row(row, users, icon_sm, row_number):
     attestation = row.get('ai_attestation', ATTESTATION_WARNING)
     attestation_icon = ATTESTATION_ICON[attestation]
     attestation_label = html.escape(ATTESTATION_LABEL[attestation])
+    pr_number = row['url'].split('/')[-1]
     return f'''      <tr>
         <td class="col-num">{row_number}</td>
-        <td class="col-repo"><span class="pill">{html.escape(row['repo'])}</span></td>
+        <td class="col-repo"><span class="pill">{html.escape(row['repo'])}#{pr_number}</span></td>
         <td class="col-title"><a href="{html.escape(row['url'])}" target="_blank" rel="noopener">{html.escape(row['title'])}</a></td>
         <td class="col-author" title="{tooltip}"><a href="{html.escape(author_url)}" target="_blank" rel="noopener">@{html.escape(author)}</a>{maintainer_badge}</td>
         <td class="col-ai" title="{attestation_label}">{attestation_icon}</td>
@@ -212,7 +213,7 @@ def render_html(data, generated_at):
     font-size: 0.9rem;
   }}
   main {{
-    max-width: 1000px;
+    max-width: 1400px;
     margin: -1.75rem auto 3rem;
     padding: 0 1.5rem;
   }}
@@ -288,12 +289,15 @@ def render_html(data, generated_at):
     font-weight: 600;
     white-space: nowrap;
   }}
+
   .col-title a {{
     color: var(--waffle-base);
     text-decoration: none;
     font-weight: 600;
   }}
   .col-title a:hover {{ text-decoration: underline; }}
+  .col-repo {{ width: 280px; }}
+  .col-author {{ width: 180px; }}
   .col-author a {{
     color: var(--waffle-deep);
     text-decoration: none;
@@ -301,8 +305,8 @@ def render_html(data, generated_at):
   }}
   .col-author a:hover {{ text-decoration: underline; }}
   .maintainer-badge {{ color: #f9a825; cursor: default; }}
-  .col-ai {{ text-align: center; font-size: 1.1rem; cursor: default; }}
-  .col-updated {{ color: #5a6b5f; white-space: nowrap; }}
+  .col-ai {{ width: 60px; text-align: center; font-size: 1.1rem; cursor: default; }}
+  .col-updated {{ width: 140px; color: #5a6b5f; white-space: nowrap; }}
   .empty-plate {{
     text-align: center;
     padding: 3rem 1rem;
@@ -310,7 +314,7 @@ def render_html(data, generated_at):
   }}
   .empty-plate .waffle-icon {{ margin-bottom: 1rem; }}
   footer {{
-    max-width: 1000px;
+    max-width: 1400px;
     margin: 0 auto 2rem;
     padding: 0 1.5rem;
     text-align: center;
