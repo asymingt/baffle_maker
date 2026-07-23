@@ -28,25 +28,35 @@ This project uses Bazel and `rules_python` with `uv` for dependency management.
 ### Prerequisites
 
 Set your GitHub token in your environment:
+
 ```bash
 export GITHUB_API_TOKEN="your_personal_access_token"
+```
+
+Or, if you have the `gh` tool and you're logged in then you can do this more simply with:
+
+```bash
+export GITHUB_API_TOKEN=$(gh auth token)
 ```
 
 ### Steps
 
 1. **Query the GitHub API**:
-   ```bash
-   bazel run //baffle:query
-   ```
+
+```bash
+bazel run //baffle:query
+```
 
 2. **Analyze the fetched data**:
-   ```bash
-   bazel run //baffle:analyze
-   ```
+
+```bash
+bazel run //baffle:analyze
+```
 
 3. **Render the dashboard**:
-   ```bash
-   bazel run //baffle:render
-   ```
+
+```bash
+bazel run //baffle:render
+```
 
 After running the render tool, open `site/index.html` in your browser to view the Baffle Board.

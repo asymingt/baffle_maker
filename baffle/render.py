@@ -63,7 +63,7 @@ def format_age(days):
     return '%d day%s' % (remainder_days, '' if remainder_days == 1 else 's')
 
 
-def render_row(row, users, icon_sm):
+def render_row(row, users, icon_sm, row_number):
     author = row['author']
     user = users.get(author, {})
     author_url = 'https://github.com/' + author
@@ -83,30 +83,32 @@ def render_row(row, users, icon_sm):
     attestation_icon = ATTESTATION_ICON[attestation]
     attestation_label = html.escape(ATTESTATION_LABEL[attestation])
     return f'''      <tr>
-        <td class="col-icon">{icon_sm}</td>
+        <td class="col-num">{row_number}</td>
         <td class="col-repo"><span class="pill">{html.escape(row['repo'])}</span></td>
         <td class="col-title"><a href="{html.escape(row['url'])}" target="_blank" rel="noopener">{html.escape(row['title'])}</a></td>
         <td class="col-author" title="{tooltip}"><a href="{html.escape(author_url)}" target="_blank" rel="noopener">@{html.escape(author)}</a>{maintainer_badge}</td>
         <td class="col-ai" title="{attestation_label}">{attestation_icon}</td>
         <td class="col-updated">{parse_iso(row['updated']).strftime('%b %d, %Y')}</td>
+        <td class="col-icon"><div class="waffle-container">{icon_sm}<input type="checkbox"></div></td>
       </tr>'''
 
 
-def render_group(classification, rows, users, icon_sm):
+def render_group(classification, rows, users, icon_sm, start_index):
     if not rows:
         return ''
-    body_rows = [render_row(row, users, icon_sm) for row in rows]
+    body_rows = [render_row(row, users, icon_sm, start_index + idx) for idx, row in enumerate(rows)]
     return f'''    <section class="group">
       <h2 class="group-heading">{GROUP_ICON[classification]} {html.escape(classification)} <span class="count-badge">{len(rows)}</span></h2>
       <table>
         <thead>
           <tr>
-            <th class="col-icon"></th>
+            <th class="col-num">#</th>
             <th class="col-repo">Repository</th>
             <th class="col-title">Title</th>
             <th class="col-author">Author</th>
             <th class="col-ai">AI</th>
             <th class="col-updated">Last updated</th>
+            <th class="col-icon"></th>
           </tr>
         </thead>
         <tbody>
@@ -129,10 +131,15 @@ def render_html(data, generated_at):
         grouped.setdefault(classification, []).append(row)
 
     if rows:
-        sections_html = '\n'.join(
-            render_group(classification, grouped.get(classification, []), users, icon_sm)
-            for classification in CLASSIFICATION_ORDER
-        )
+        sections = []
+        current_index = 1
+        for classification in CLASSIFICATION_ORDER:
+            group_rows = grouped.get(classification, [])
+            if not group_rows:
+                continue
+            sections.append(render_group(classification, group_rows, users, icon_sm, current_index))
+            current_index += len(group_rows)
+        sections_html = '\n'.join(sections)
         badge_text = ' · '.join(
             '%d %s' % (len(grouped.get(classification, [])), classification)
             for classification in CLASSIFICATION_ORDER
@@ -254,7 +261,23 @@ def render_html(data, generated_at):
   tbody tr:nth-child(even) {{ background: var(--waffle-mist); }}
   tbody tr:hover {{ background: var(--waffle-pale); }}
   td {{ padding: 0.65rem 1rem; vertical-align: middle; }}
+  .col-num {{ width: 30px; color: #5a6b5f; font-size: 0.85rem; }}
   .col-icon {{ width: 44px; }}
+  .waffle-container {{
+    position: relative;
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    vertical-align: middle;
+  }}
+  .waffle-container input[type="checkbox"] {{
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    cursor: pointer;
+  }}
   .pill {{
     display: inline-block;
     background: var(--waffle-pale);
