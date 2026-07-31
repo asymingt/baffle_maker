@@ -103,10 +103,16 @@ def _find_latest(site_dir, pattern):
 
 
 def find_latest_data_file(site_dir):
+    cache_path = os.path.join(site_dir, 'issue_cache.yaml')
+    if os.path.exists(cache_path):
+        return cache_path
     return _find_latest(site_dir, DATE_FILE_RE)
 
 
 def find_latest_analyzed_file(site_dir):
+    cache_path = os.path.join(site_dir, 'issue_cache_analyzed.yaml')
+    if os.path.exists(cache_path):
+        return cache_path
     return _find_latest(site_dir, ANALYZED_FILE_RE)
 
 

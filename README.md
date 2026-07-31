@@ -11,10 +11,10 @@ Baffle evolved from `waffle_maker.py`, a script originally used by the Waffle te
 The pipeline is split into three main stages:
 
 1. **Query** (`baffle/query.py`):
-   Queries the GitHub API for open, unassigned, non-draft, and non-archived pull requests across the configured GitHub organizations. It also fetches public statistics for the PR authors (such as account age, public PR count, public issue count, and review count). The results are saved as a raw YAML file in the `site/` directory (e.g., `site/YYYY-MM-DD.yaml`).
+   Queries the GitHub API for open, unassigned, non-draft, and non-archived pull requests across the configured GitHub organizations. It also fetches public statistics for the PR authors (such as account age, public PR count, public issue count, and review count). The results are merged with existing cached issues and saved in `site/issue_cache.yaml`.
 
 2. **Analyze** (`baffle/analyze.py`):
-   Reads the raw data, analyzes the contributors, and writes a `<date>_analyzed.yaml` file.
+   Reads the raw data, analyzes the contributors, and writes `site/issue_cache_analyzed.yaml`.
    - **Contributor Classification**: Classifies contributors into `Human`, `Unknown`, `Bot`, or `AI` categories. It calculates an *engagement ratio* (`(public_issues + public_reviews) / public_pull_requests`) to identify potential AI-driven PR farms (accounts with low engagement relative to their PR count) versus active community members.
    - **AI Attestation**: Examines the PR description to check if the author answered the template's "Did you use Generative AI?" question.
 

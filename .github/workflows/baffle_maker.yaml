@@ -48,28 +48,22 @@ jobs:
           bazelisk-cache: false
           disk-cache: false
           repository-cache: false
-      - name: Determine data file paths
-        id: paths
-        run: |
-          DATE=$(date -u +%Y-%m-%d)
-          echo "raw=$GITHUB_WORKSPACE/site/${DATE}.yaml" >> "$GITHUB_OUTPUT"
-          echo "analyzed=$GITHUB_WORKSPACE/site/${DATE}_analyzed.yaml" >> "$GITHUB_OUTPUT"
       - name: Query GitHub for open pull requests (MODEL)
         env:
           GITHUB_API_TOKEN: ${{ secrets.WAFFLE_API_TOKEN }}
           USE_BAZEL_VERSION: 9.1.1
         run: |
-          bazel run //baffle:query -- "${{ steps.paths.outputs.raw }}"
+          bazel run //baffle:query -- --force
       - name: Classify contributors (CONTROLLER)
         env:
           USE_BAZEL_VERSION: 9.1.1
         run: |
-          bazel run //baffle:analyze -- "${{ steps.paths.outputs.raw }}"
+          bazel run //baffle:analyze
       - name: Render the baffle board (VIEW)
         env:
           USE_BAZEL_VERSION: 9.1.1
         run: |
-          bazel run //baffle:render -- "${{ steps.paths.outputs.analyzed }}"
+          bazel run //baffle:render
       - name: Setup Pages
         if: github.event_name == 'push' || github.event_name == 'schedule' || inputs.publish_to_pages == true
         uses: actions/configure-pages@v5

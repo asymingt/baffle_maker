@@ -83,7 +83,7 @@ def render_row(row, users, icon_sm, row_number):
     attestation_icon = ATTESTATION_ICON[attestation]
     attestation_label = html.escape(ATTESTATION_LABEL[attestation])
     pr_number = row['url'].split('/')[-1]
-    return f'''      <tr>
+    return f'''      <tr data-updated="{html.escape(row['updated'])}">
         <td class="col-num">{row_number}</td>
         <td class="col-repo"><span class="pill">{html.escape(row['repo'])}#{pr_number}</span></td>
         <td class="col-title"><a href="{html.escape(row['url'])}" target="_blank" rel="noopener">{html.escape(row['title'])}</a></td>
@@ -113,6 +113,11 @@ def render_group(classification, rows, users, icon_sm, start_index):
           </tr>
         </thead>
         <tbody>
+          <tr class="empty-fortnight-row" style="display: none;">
+            <td colspan="7" style="text-align: center; padding: 2rem; color: var(--waffle-base); font-style: italic;">
+              No PRs were found for the last fortnight. Use the links below to pull up older issues.
+            </td>
+          </tr>
 {chr(10).join(body_rows)}
         </tbody>
       </table>
@@ -327,6 +332,46 @@ def render_html(data, generated_at):
     table {{ font-size: 0.85rem; }}
     .col-updated, .col-author {{ display: none; }}
   }}
+  .pagination {{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.25rem;
+    background: var(--waffle-mist);
+    border-top: 1px solid var(--waffle-light);
+  }}
+  .pagination button {{
+    background: var(--waffle-base);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: background 0.15s ease, transform 0.1s ease;
+  }}
+  .pagination button:hover:not(:disabled) {{
+    background: var(--waffle-deep);
+    transform: translateY(-1px);
+  }}
+  .pagination button:active:not(:disabled) {{
+    transform: translateY(0);
+  }}
+  .pagination button:disabled {{
+    background: var(--waffle-pale);
+    color: var(--waffle-light);
+    cursor: not-allowed;
+    box-shadow: none;
+  }}
+  .pagination-info {{
+    font-size: 0.95rem;
+    color: var(--waffle-dark);
+    font-weight: 600;
+    user-select: none;
+  }}
 </style>
 </head>
 <body>
@@ -344,6 +389,7 @@ def render_html(data, generated_at):
     <p>Generated {generated_at.strftime('%b %d, %Y %H:%M UTC')} by <code>baffle_maker</code>.</p>
   </footer>
   <script>
+    const GENERATED_AT = "{generated_at.isoformat()}";
     document.addEventListener('DOMContentLoaded', () => {{
       const checkboxes = document.querySelectorAll('.waffle-container input[type="checkbox"]');
       checkboxes.forEach(cb => {{
@@ -358,6 +404,103 @@ def render_html(data, generated_at):
             localStorage.removeItem(url);
           }}
         }});
+      }});
+
+      // Pagination
+      const PAGE_SIZE = 10;
+      const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+      const generatedDate = new Date(GENERATED_AT);
+
+      const groups = document.querySelectorAll('section.group');
+      groups.forEach(group => {{
+        const tbody = group.querySelector('tbody');
+        if (!tbody) return;
+        const rows = Array.from(tbody.querySelectorAll('tr:not(.empty-fortnight-row)'));
+        const placeholderRow = tbody.querySelector('.empty-fortnight-row');
+        
+        // Separate rows into recent (last 2 weeks) and older
+        const recentRows = [];
+        const olderRows = [];
+        
+        rows.forEach(row => {{
+          const updatedStr = row.getAttribute('data-updated');
+          if (updatedStr) {{
+            const updatedDate = new Date(updatedStr);
+            if (generatedDate - updatedDate <= TWO_WEEKS_MS) {{
+              recentRows.push(row);
+            }} else {{
+              olderRows.push(row);
+            }}
+          }} else {{
+            olderRows.push(row);
+          }}
+        }});
+
+        // Determine total pages. Page 1 is recentRows. Pages 2+ are olderRows.
+        const olderPages = Math.ceil(olderRows.length / PAGE_SIZE);
+        const totalPages = 1 + olderPages;
+
+        // If totalPages is 1 (meaning 0 older rows, and we have some recent rows),
+        // we don't need pagination controls.
+        if (totalPages === 1) {{
+          recentRows.forEach(row => row.style.display = '');
+          if (placeholderRow) placeholderRow.style.display = 'none';
+          return;
+        }}
+
+        let currentPage = 1;
+
+        const paginationDiv = document.createElement('div');
+        paginationDiv.className = 'pagination';
+
+        const prevBtn = document.createElement('button');
+        prevBtn.textContent = '◀ Prev';
+        prevBtn.disabled = true;
+
+        const infoSpan = document.createElement('span');
+        infoSpan.className = 'pagination-info';
+
+        const nextBtn = document.createElement('button');
+        nextBtn.textContent = 'Next ▶';
+
+        paginationDiv.appendChild(prevBtn);
+        paginationDiv.appendChild(infoSpan);
+        paginationDiv.appendChild(nextBtn);
+        group.appendChild(paginationDiv);
+
+        function showPage(page) {{
+          currentPage = page;
+          
+          // Hide everything first
+          rows.forEach(r => r.style.display = 'none');
+          if (placeholderRow) placeholderRow.style.display = 'none';
+
+          if (currentPage === 1) {{
+            if (recentRows.length > 0) {{
+              recentRows.forEach(r => r.style.display = '');
+            }} else {{
+              if (placeholderRow) placeholderRow.style.display = '';
+            }}
+          }} else {{
+            const startIdx = (currentPage - 2) * PAGE_SIZE;
+            const endIdx = startIdx + PAGE_SIZE;
+            olderRows.slice(startIdx, endIdx).forEach(r => r.style.display = '');
+          }}
+
+          prevBtn.disabled = (currentPage === 1);
+          nextBtn.disabled = (currentPage === totalPages);
+          infoSpan.textContent = `Page ${{currentPage}} of ${{totalPages}}`;
+        }}
+
+        prevBtn.addEventListener('click', () => {{
+          if (currentPage > 1) showPage(currentPage - 1);
+        }});
+
+        nextBtn.addEventListener('click', () => {{
+          if (currentPage < totalPages) showPage(currentPage + 1);
+        }});
+
+        showPage(1);
       }});
     }});
   </script>
