@@ -129,8 +129,8 @@ def render_group(classification, rows, users, icon_sm, start_index):
 def render_html(data, generated_at):
     rows = data.get('pull_requests', [])
     users = data.get('users', {})
-    icon_lg = waffle_icon(size=64, cell_id='hero')
-    icon_sm = waffle_icon(size=28, cell_id='row')
+    icon_lg = waffle_icon(size=64, cell_id='hero', include_defs=False)
+    icon_sm = waffle_icon(size=28, cell_id='row', include_defs=False)
     favicon = waffle_favicon_data_uri()
 
     grouped = {classification: [] for classification in CLASSIFICATION_ORDER}
@@ -456,6 +456,26 @@ def render_html(data, generated_at):
 </style>
 </head>
 <body>
+  <svg style="position: absolute; width: 0; height: 0; overflow: hidden;" version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="body-row" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="{WAFFLE_MID}"/>
+        <stop offset="100%" stop-color="{WAFFLE_BASE}"/>
+      </linearGradient>
+      <linearGradient id="pocket-row" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="{WAFFLE_DEEP}"/>
+        <stop offset="100%" stop-color="{WAFFLE_DARK}"/>
+      </linearGradient>
+      <linearGradient id="body-hero" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="{WAFFLE_MID}"/>
+        <stop offset="100%" stop-color="{WAFFLE_BASE}"/>
+      </linearGradient>
+      <linearGradient id="pocket-hero" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="{WAFFLE_DEEP}"/>
+        <stop offset="100%" stop-color="{WAFFLE_DARK}"/>
+      </linearGradient>
+    </defs>
+  </svg>
   <div class="hero">
     <div class="hero-icons">{icon_lg}{icon_lg}{icon_lg}</div>
     <h1>The Baffle Board</h1>
