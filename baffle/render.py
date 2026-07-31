@@ -21,6 +21,7 @@ human-authored PRs are prioritized."""
 import datetime
 import html
 import os
+import subprocess
 import sys
 
 import yaml
@@ -50,6 +51,24 @@ GROUP_ICON = {
     CLASSIFICATION_BOT: '&#129302;',     # robot
     CLASSIFICATION_AI: '&#129504;',      # brain
 }
+
+
+def detect_repo_url():
+    # Check GitHub Actions env var
+    repo = os.environ.get('GITHUB_REPOSITORY')
+    if repo:
+        return f"https://github.com/{repo}"
+
+    # Fallback: check git config
+    try:
+        url = subprocess.check_output(['git', 'config', '--get', 'remote.origin.url'], text=True).strip()
+        if url.startswith('git@github.com:'):
+            url = url.replace('git@github.com:', 'https://github.com/').replace('.git', '')
+        elif url.endswith('.git'):
+            url = url[:-4]
+        return url
+    except Exception:
+        return "https://github.com/asymingt/baffle_maker"
 
 
 def parse_iso(value):
@@ -129,6 +148,7 @@ def render_group(classification, rows, users, icon_sm, start_index):
 def render_html(data, generated_at):
     rows = data.get('pull_requests', [])
     users = data.get('users', {})
+    repo_url = detect_repo_url()
     icon_lg = waffle_icon(size=64, cell_id='hero', include_defs=False)
     icon_sm = waffle_icon(size=28, cell_id='row', include_defs=False)
     favicon = waffle_favicon_data_uri()
@@ -492,7 +512,7 @@ def render_html(data, generated_at):
     <div class="hero-icons">{icon_lg}{icon_lg}{icon_lg}</div>
     <h1>The Baffle Board</h1>
     <p>Unassigned, unlabeled ROS&nbsp;2 &amp; ament pull requests waiting for a reviewer.</p>
-    <a href="https://github.com/asymingt/baffle_maker" target="_blank" rel="noopener" class="repo-link" title="View Source on GitHub">
+    <a href="{repo_url}" target="_blank" rel="noopener" class="repo-link" title="View Source on GitHub">
       <svg class="github-logo" viewBox="0 0 16 16" version="1.1" width="24" height="24" aria-hidden="true" fill="currentColor">
         <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.35 3.12.88.01.64.01 1.11.01 1.28 0 .21-.15.46-.55.38A8.013 8.013 0 0 1 0 8c0-4.42 3.58-8 8-8z"></path>
       </svg>
