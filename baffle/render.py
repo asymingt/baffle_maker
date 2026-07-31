@@ -388,6 +388,7 @@ def render_html(data, generated_at):
     max-width: 950px;
     max-height: 700px;
     overflow-y: auto;
+    overscroll-behavior: contain;
     z-index: 1000;
     font-size: 0.85rem;
     line-height: 1.4;
@@ -667,6 +668,13 @@ def render_html(data, generated_at):
           }}
           hideTooltip();
         }});
+
+        cell.addEventListener('wheel', (e) => {{
+          if (tooltip.style.display === 'block' && tooltip.scrollHeight > tooltip.clientHeight) {{
+            tooltip.scrollTop += e.deltaY;
+            e.preventDefault();
+          }}
+        }}, {{ passive: false }});
       }});
 
       tooltip.addEventListener('mouseenter', () => {{
