@@ -384,7 +384,7 @@ def render_html(data, generated_at):
     border-radius: 8px;
     padding: 1rem;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
-    pointer-events: none;
+    pointer-events: auto;
     max-width: 950px;
     max-height: 700px;
     overflow-y: auto;
@@ -589,17 +589,34 @@ def render_html(data, generated_at):
       tooltip.className = 'pr-tooltip';
       document.body.appendChild(tooltip);
 
+      let hideTimeout = null;
+
       const tableRows = document.querySelectorAll('tbody tr:not(.empty-fortnight-row)');
+      
+      const showTooltip = (row) => {{
+        if (hideTimeout) {{
+          clearTimeout(hideTimeout);
+          hideTimeout = null;
+        }}
+        const title = row.getAttribute('data-title');
+        const body = row.getAttribute('data-body') || 'No description provided.';
+        
+        tooltip.innerHTML = `
+          <div class="pr-tooltip-title">${{title}}</div>
+          <div class="pr-tooltip-body">${{marked.parse(body)}}</div>
+        `;
+        tooltip.style.display = 'block';
+      }};
+
+      const hideTooltip = () => {{
+        hideTimeout = setTimeout(() => {{
+          tooltip.style.display = 'none';
+        }}, 100);
+      }};
+
       tableRows.forEach(row => {{
         row.addEventListener('mouseenter', () => {{
-          const title = row.getAttribute('data-title');
-          const body = row.getAttribute('data-body') || 'No description provided.';
-          
-          tooltip.innerHTML = `
-            <div class="pr-tooltip-title">${{title}}</div>
-            <div class="pr-tooltip-body">${{marked.parse(body)}}</div>
-          `;
-          tooltip.style.display = 'block';
+          showTooltip(row);
         }});
 
         row.addEventListener('mousemove', (e) => {{
@@ -622,9 +639,28 @@ def render_html(data, generated_at):
           tooltip.style.top = `${{y}}px`;
         }});
 
-        row.addEventListener('mouseleave', () => {{
-          tooltip.style.display = 'none';
+        row.addEventListener('mouseleave', (e) => {{
+          if (e.relatedTarget === tooltip || tooltip.contains(e.relatedTarget)) {{
+            if (hideTimeout) clearTimeout(hideTimeout);
+            return;
+          }}
+          hideTooltip();
         }});
+      }});
+
+      tooltip.addEventListener('mouseenter', () => {{
+        if (hideTimeout) {{
+          clearTimeout(hideTimeout);
+          hideTimeout = null;
+        }}
+      }});
+
+      tooltip.addEventListener('mouseleave', (e) => {{
+        const targetRow = e.relatedTarget ? e.relatedTarget.closest('tr') : null;
+        if (targetRow && targetRow.tagName === 'TR') {{
+          return;
+        }}
+        tooltip.style.display = 'none';
       }});
     }});
   </script>
