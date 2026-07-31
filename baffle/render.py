@@ -83,7 +83,9 @@ def render_row(row, users, icon_sm, row_number):
     attestation_icon = ATTESTATION_ICON[attestation]
     attestation_label = html.escape(ATTESTATION_LABEL[attestation])
     pr_number = row['url'].split('/')[-1]
-    return f'''      <tr data-updated="{html.escape(row['updated'])}">
+    body_escaped = html.escape(row.get('body', ''))
+    title_escaped = html.escape(row['title'])
+    return f'''      <tr data-updated="{html.escape(row['updated'])}" data-title="{title_escaped}" data-body="{body_escaped}">
         <td class="col-num">{row_number}</td>
         <td class="col-repo"><span class="pill">{html.escape(row['repo'])}#{pr_number}</span></td>
         <td class="col-title"><a href="{html.escape(row['url'])}" target="_blank" rel="noopener">{html.escape(row['title'])}</a></td>
@@ -164,6 +166,7 @@ def render_html(data, generated_at):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Baffle Board</title>
 <link rel="icon" href="{favicon}">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
   :root {{
     --waffle-dark: {WAFFLE_DARK};
@@ -372,6 +375,77 @@ def render_html(data, generated_at):
     font-weight: 600;
     user-select: none;
   }}
+  .pr-tooltip {{
+    position: absolute;
+    display: none;
+    background: #1e1e1e;
+    color: #f5f5f5;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+    max-width: 950px;
+    max-height: 700px;
+    overflow-y: auto;
+    z-index: 1000;
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }}
+  .pr-tooltip-title {{
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    color: var(--waffle-light);
+    border-bottom: 1px solid #444;
+    padding-bottom: 0.25rem;
+  }}
+  .pr-tooltip-body {{
+    font-family: inherit;
+    margin: 0;
+    color: #e0e0e0;
+  }}
+  .pr-tooltip-body p {{
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+  }}
+  .pr-tooltip-body code {{
+    background: #2d2d2d;
+    color: #f8f8f2;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 0.85rem;
+  }}
+  .pr-tooltip-body pre {{
+    background: #2d2d2d;
+    padding: 0.75rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin-top: 0.5rem;
+    margin-bottom: 0.75rem;
+  }}
+  .pr-tooltip-body pre code {{
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-size: 0.85rem;
+  }}
+  .pr-tooltip-body h1, .pr-tooltip-body h2, .pr-tooltip-body h3 {{
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--waffle-light);
+    font-size: 1rem;
+  }}
+  .pr-tooltip-body ul, .pr-tooltip-body ol {{
+    margin-top: 0.25rem;
+    margin-bottom: 0.75rem;
+    padding-left: 1.25rem;
+  }}
+  .pr-tooltip-body li {{
+    margin-bottom: 0.25rem;
+  }}
 </style>
 </head>
 <body>
@@ -501,6 +575,49 @@ def render_html(data, generated_at):
         }});
 
         showPage(1);
+      }});
+
+      // Tooltip handling
+      const tooltip = document.createElement('div');
+      tooltip.className = 'pr-tooltip';
+      document.body.appendChild(tooltip);
+
+      const tableRows = document.querySelectorAll('tbody tr:not(.empty-fortnight-row)');
+      tableRows.forEach(row => {{
+        row.addEventListener('mouseenter', () => {{
+          const title = row.getAttribute('data-title');
+          const body = row.getAttribute('data-body') || 'No description provided.';
+          
+          tooltip.innerHTML = `
+            <div class="pr-tooltip-title">${{title}}</div>
+            <div class="pr-tooltip-body">${{marked.parse(body)}}</div>
+          `;
+          tooltip.style.display = 'block';
+        }});
+
+        row.addEventListener('mousemove', (e) => {{
+          const tooltipWidth = tooltip.offsetWidth;
+          const tooltipHeight = tooltip.offsetHeight;
+          const pageX = e.pageX;
+          const pageY = e.pageY;
+          
+          let x = pageX + 15;
+          let y = pageY + 15;
+          
+          if (x + tooltipWidth > window.innerWidth + window.scrollX) {{
+            x = pageX - tooltipWidth - 15;
+          }}
+          if (y + tooltipHeight > window.innerHeight + window.scrollY) {{
+            y = pageY - tooltipHeight - 15;
+          }}
+          
+          tooltip.style.left = `${{x}}px`;
+          tooltip.style.top = `${{y}}px`;
+        }});
+
+        row.addEventListener('mouseleave', () => {{
+          tooltip.style.display = 'none';
+        }});
       }});
     }});
   </script>

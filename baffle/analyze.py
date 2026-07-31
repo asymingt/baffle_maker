@@ -126,7 +126,6 @@ def main():
 
     for row in data.get('pull_requests', []):
         row['ai_attestation'] = classify_ai_attestation(row.get('body', ''))
-        row.pop('body', None)
 
     out_path = analyzed_file_path(data_path)
     with open(out_path, 'w', encoding='utf-8') as f:
