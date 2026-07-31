@@ -611,13 +611,14 @@ def render_html(data, generated_at):
 
       let hideTimeout = null;
 
-      const tableRows = document.querySelectorAll('tbody tr:not(.empty-fortnight-row)');
+      const repoCells = document.querySelectorAll('tbody td.col-repo');
       
-      const showTooltip = (row) => {{
+      const showTooltip = (cell) => {{
         if (hideTimeout) {{
           clearTimeout(hideTimeout);
           hideTimeout = null;
         }}
+        const row = cell.closest('tr');
         const title = row.getAttribute('data-title');
         const body = row.getAttribute('data-body') || 'No description provided.';
         
@@ -634,12 +635,12 @@ def render_html(data, generated_at):
         }}, 100);
       }};
 
-      tableRows.forEach(row => {{
-        row.addEventListener('mouseenter', () => {{
-          showTooltip(row);
+      repoCells.forEach(cell => {{
+        cell.addEventListener('mouseenter', () => {{
+          showTooltip(cell);
         }});
 
-        row.addEventListener('mousemove', (e) => {{
+        cell.addEventListener('mousemove', (e) => {{
           const tooltipWidth = tooltip.offsetWidth;
           const tooltipHeight = tooltip.offsetHeight;
           const pageX = e.pageX;
@@ -659,7 +660,7 @@ def render_html(data, generated_at):
           tooltip.style.top = `${{y}}px`;
         }});
 
-        row.addEventListener('mouseleave', (e) => {{
+        cell.addEventListener('mouseleave', (e) => {{
           if (e.relatedTarget === tooltip || tooltip.contains(e.relatedTarget)) {{
             if (hideTimeout) clearTimeout(hideTimeout);
             return;
@@ -676,8 +677,8 @@ def render_html(data, generated_at):
       }});
 
       tooltip.addEventListener('mouseleave', (e) => {{
-        const targetRow = e.relatedTarget ? e.relatedTarget.closest('tr') : null;
-        if (targetRow && targetRow.tagName === 'TR') {{
+        const targetCell = e.relatedTarget ? e.relatedTarget.closest('td.col-repo') : null;
+        if (targetCell) {{
           return;
         }}
         tooltip.style.display = 'none';
