@@ -446,6 +446,13 @@ def render_html(data, generated_at):
   .pr-tooltip-body li {{
     margin-bottom: 0.25rem;
   }}
+  .pr-tooltip-body a {{
+    color: var(--waffle-light);
+    text-decoration: underline;
+  }}
+  .pr-tooltip-body a:hover {{
+    color: white;
+  }}
 </style>
 </head>
 <body>
