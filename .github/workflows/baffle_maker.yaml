@@ -23,11 +23,16 @@ on:
     - cron: '0 14 * * *'
   workflow_dispatch:
     inputs:
+      erase_cache:
+        description: 'Erase the cache'
+        required: true
+        type: boolean
+        default: false
       publish_to_pages:
         description: 'Publish the result to pages'
         required: true
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -53,6 +58,10 @@ jobs:
           key: baffle-site-cache-${{ github.run_id }}
           restore-keys: |
             baffle-site-cache-
+      - name: Erase cache
+        if: inputs.erase_cache == true
+        run: |
+          rm -rf site/*
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@0.19.0
         with:

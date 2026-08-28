@@ -92,6 +92,7 @@ def fetch_pull_requests(gh, search):
             'url': url,
             'kind': kind,
             'author': issue.user.login if issue.user else 'unknown',
+            'created': issue.created_at.isoformat(),
             'updated': issue.updated_at.isoformat(),
             'body': issue.body or '',
         })
@@ -110,39 +111,49 @@ def fetch_org_members(gh, orgs):
 
 
 def fetch_user_stats(gh, username, org_members):
+    now = datetime.datetime.now(datetime.timezone.utc)
+    stats = {
+        'account_created_at': None,
+        'account_age_days': 0,
+        'public_pull_requests': 0,
+        'public_issues': 0,
+        'public_reviews': 0,
+        'is_ros_maintainer': username in org_members or username in ROS_MAINTAINER_OVERRIDES,
+        # True when GitHub excludes this account from its search API (a
+        # flagged/restricted account: the profile still resolves but an
+        # author-qualified search 422s). analyze.py falls back to the
+        # PR-burst heuristic for these users.
+        'search_restricted': False,
+        'last_updated_at': now.isoformat(),
+    }
+
     try:
         user = gh.get_user(username)
         created_at = user.created_at
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=datetime.timezone.utc)
-        account_age_days = (datetime.datetime.now(datetime.timezone.utc) - created_at).days
-
-        pull_requests = gh.search_issues('is:pr is:public author:%s' % username).totalCount
-        issues = gh.search_issues('is:issue is:public author:%s' % username).totalCount
-        reviews = gh.search_issues('is:pr is:public reviewed-by:%s' % username).totalCount
-
-        return {
-            'account_created_at': created_at.isoformat(),
-            'account_age_days': account_age_days,
-            'public_pull_requests': pull_requests,
-            'public_issues': issues,
-            'public_reviews': reviews,
-            'is_ros_maintainer': username in org_members or username in ROS_MAINTAINER_OVERRIDES,
-            'last_updated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        }
+        stats['account_created_at'] = created_at.isoformat()
+        stats['account_age_days'] = (now - created_at).days
     except GithubException as e:
-        if e.status in (404, 422):
-            print(f"Warning: failed to fetch stats for user {username}: {e}", file=sys.stderr)
-            return {
-                'account_created_at': None,
-                'account_age_days': 0,
-                'public_pull_requests': 0,
-                'public_issues': 0,
-                'public_reviews': 0,
-                'is_ros_maintainer': username in org_members or username in ROS_MAINTAINER_OVERRIDES,
-                'last_updated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            }
-        raise e
+        if e.status not in (404, 422):
+            raise e
+        print(f"Warning: failed to fetch profile for user {username}: {e}", file=sys.stderr)
+        stats['search_restricted'] = True
+        return stats
+
+    # Kept separate from the profile lookup above so a search 422 doesn't
+    # discard the account age we just resolved.
+    try:
+        stats['public_pull_requests'] = gh.search_issues('is:pr is:public author:%s' % username).totalCount
+        stats['public_issues'] = gh.search_issues('is:issue is:public author:%s' % username).totalCount
+        stats['public_reviews'] = gh.search_issues('is:pr is:public reviewed-by:%s' % username).totalCount
+    except GithubException as e:
+        if e.status not in (404, 422):
+            raise e
+        print(f"Warning: search restricted for user {username}: {e}", file=sys.stderr)
+        stats['search_restricted'] = True
+
+    return stats
 
 
 def data_file_path(site_dir, today):
