@@ -89,14 +89,21 @@ def render_row(row, users, icon_sm, row_number):
     is_maintainer = user.get('is_ros_maintainer', False)
     maintainer_badge = ' <span class="maintainer-badge" title="ROS maintainer">&#9733;</span>' if is_maintainer else ''
     tooltip_parts = []
-    if user.get('account_age_days') is not None:
+    if user.get('account_age_days'):
         tooltip_parts.append('Account age: %s' % format_age(user['account_age_days']))
-    if user.get('public_pull_requests') is not None:
-        tooltip_parts.append('Public PRs: %d' % user['public_pull_requests'])
-    if user.get('public_issues') is not None:
-        tooltip_parts.append('Public issues: %d' % user['public_issues'])
-    if user.get('public_reviews') is not None:
-        tooltip_parts.append('Public reviews: %d' % user['public_reviews'])
+    if user.get('open_pr_count') is not None:
+        # Search-restricted account: the public_* counts are all zero
+        # placeholders, so show the burst inputs that drove the call instead.
+        tooltip_parts.append('Public history hidden by GitHub')
+        tooltip_parts.append('Open ROS PRs: %d (peak %d/hr)' % (
+            user['open_pr_count'], user.get('max_pr_burst', 0)))
+    else:
+        if user.get('public_pull_requests') is not None:
+            tooltip_parts.append('Public PRs: %d' % user['public_pull_requests'])
+        if user.get('public_issues') is not None:
+            tooltip_parts.append('Public issues: %d' % user['public_issues'])
+        if user.get('public_reviews') is not None:
+            tooltip_parts.append('Public reviews: %d' % user['public_reviews'])
     tooltip = html.escape(' · '.join(tooltip_parts))
     attestation = row.get('ai_attestation', ATTESTATION_WARNING)
     attestation_icon = ATTESTATION_ICON[attestation]

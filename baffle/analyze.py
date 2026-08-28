@@ -26,8 +26,15 @@ without that reciprocal engagement. Accounts with too few PRs to trust the
 ratio are marked Unknown rather than guessed at. A literal "[bot]" suffix
 (GitHub Apps, e.g. mergify[bot]) is always classified as Bot, separately
 from the heuristic-driven AI bucket.
+
+Accounts GitHub has hidden from its search API (query.py sets
+"search_restricted") have no engagement numbers to work with, so they fall
+back to a PR-burst heuristic: how many PRs the account has fired at the ROS
+orgs, and how tightly clustered in time they are. Genuine contributors
+don't open several PRs within minutes of each other.
 """
 
+import datetime
 import os
 import re
 import sys
@@ -47,6 +54,11 @@ MIN_SAMPLE_PULL_REQUESTS = 10
 LOW_ENGAGEMENT_THRESHOLD = 0.15
 HIGH_ENGAGEMENT_THRESHOLD = 0.5
 
+# Fallback heuristic for search-restricted accounts (see module docstring).
+BURST_WINDOW_SECONDS = 3600
+BURST_PR_THRESHOLD = 3            # >= this many PRs within one window -> AI
+RESTRICTED_TOTAL_PR_THRESHOLD = 5  # >= this many concurrently-open PRs -> AI
+
 # Matches the PR template's "### Did you use Generative AI?" heading and the
 # "### Additional Information" heading that follows it, regardless of
 # markdown decoration (#, *, etc.) around the words.
@@ -61,9 +73,62 @@ def engagement_ratio(stats):
     return (stats.get('public_issues', 0) + stats.get('public_reviews', 0)) / prs
 
 
-def classify_user(username, stats):
+def _max_events_in_window(sorted_epochs, window_seconds):
+    """Largest number of timestamps falling within any window_seconds span."""
+    start = 0
+    best = 0
+    for end in range(len(sorted_epochs)):
+        while sorted_epochs[end] - sorted_epochs[start] > window_seconds:
+            start += 1
+        best = max(best, end - start + 1)
+    return best
+
+
+def pr_burst_by_author(rows):
+    """Map author -> {'open_pr_count', 'max_burst'} from the visible (open,
+    unassigned) PRs in the MODEL data. Only consulted for search-restricted
+    accounts, where GitHub gives us no other history to go on."""
+    epochs_by_author = {}
+    for row in rows:
+        if row.get('kind', 'PR') != 'PR':
+            continue
+        stamp = row.get('created') or row.get('updated')
+        if not stamp:
+            continue
+        try:
+            when = datetime.datetime.fromisoformat(stamp)
+        except ValueError:
+            continue
+        epochs_by_author.setdefault(row['author'], []).append(when.timestamp())
+
+    result = {}
+    for author, epochs in epochs_by_author.items():
+        epochs.sort()
+        result[author] = {
+            'open_pr_count': len(epochs),
+            'max_burst': _max_events_in_window(epochs, BURST_WINDOW_SECONDS),
+        }
+    return result
+
+
+def is_search_restricted(stats):
+    # The explicit flag is set by current query.py runs; older cached
+    # entries only show a null account_created_at with zeroed counts.
+    return bool(stats.get('search_restricted')) or stats.get('account_created_at') is None
+
+
+def classify_restricted_user(burst):
+    if (burst.get('max_burst', 0) >= BURST_PR_THRESHOLD
+            or burst.get('open_pr_count', 0) >= RESTRICTED_TOTAL_PR_THRESHOLD):
+        return CLASSIFICATION_AI
+    return CLASSIFICATION_UNKNOWN
+
+
+def classify_user(username, stats, burst=None):
     if username.endswith('[bot]'):
         return CLASSIFICATION_BOT
+    if is_search_restricted(stats):
+        return classify_restricted_user(burst or {})
     if stats.get('public_pull_requests', 0) < MIN_SAMPLE_PULL_REQUESTS:
         return CLASSIFICATION_UNKNOWN
     ratio = engagement_ratio(stats)
@@ -120,11 +185,18 @@ def main():
     with open(data_path, 'r', encoding='utf-8') as f:
         data = yaml.safe_load(f)
 
+    rows = data.get('pull_requests', [])
     users = data.get('users', {})
+    burst_by_author = pr_burst_by_author(rows)
     for username, stats in users.items():
-        stats['classification'] = classify_user(username, stats)
+        burst = burst_by_author.get(username, {})
+        stats['classification'] = classify_user(username, stats, burst)
+        if is_search_restricted(stats):
+            # Record what drove the call for an otherwise data-free account.
+            stats['open_pr_count'] = burst.get('open_pr_count', 0)
+            stats['max_pr_burst'] = burst.get('max_burst', 0)
 
-    for row in data.get('pull_requests', []):
+    for row in rows:
         row['ai_attestation'] = classify_ai_attestation(row.get('body', ''))
 
     out_path = analyzed_file_path(data_path)
