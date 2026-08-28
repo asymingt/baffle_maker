@@ -18,9 +18,9 @@ on:
     branches:
       - main
   schedule:
-    # 7AM PDT (UTC-7) every Thursday. GitHub Actions cron is always UTC and
+    # 7AM PDT (UTC-7) every day. GitHub Actions cron is always UTC and
     # doesn't shift for daylight saving, so this runs at 6AM PST in winter.
-    - cron: '0 14 * * 4'
+    - cron: '0 14 * * *'
   workflow_dispatch:
     inputs:
       publish_to_pages:
