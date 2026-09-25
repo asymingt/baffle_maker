@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@baffle_maker_py_deps//:requirements.bzl", "requirement")
-load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 
 py_library(
     name = "common",
@@ -52,5 +52,18 @@ py_binary(
     deps = [
         ":common",
         requirement("pyyaml"),
+    ],
+)
+
+py_test(
+    name = "test_baffle",
+    size = "small",
+    srcs = ["test_baffle.py"],
+    imports = ["."],
+    deps = [
+        ":analyze",
+        ":common",
+        ":query",
+        ":render",
     ],
 )
