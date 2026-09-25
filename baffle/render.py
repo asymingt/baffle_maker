@@ -20,6 +20,7 @@ human-authored PRs are prioritized."""
 
 import datetime
 import html
+import json
 import os
 import subprocess
 import sys
@@ -34,6 +35,10 @@ from common import CLASSIFICATION_BOT
 from common import CLASSIFICATION_HUMAN
 from common import CLASSIFICATION_ORDER
 from common import CLASSIFICATION_UNKNOWN
+from common import ISSUE_CATEGORY_BUGS
+from common import ISSUE_CATEGORY_ENHANCEMENTS
+from common import ISSUE_CATEGORY_GOOD_FIRST
+from common import ISSUE_GROUP_ICON
 from common import WAFFLE_BASE
 from common import WAFFLE_DARK
 from common import WAFFLE_DEEP
@@ -122,12 +127,24 @@ def render_row(row, users, icon_sm, row_number):
       </tr>'''
 
 
-def render_group(classification, rows, users, icon_sm, start_index):
+def is_good_first_issue(row):
+    return any(l.lower().strip() == 'good first issue' for l in row.get('labels', []))
+
+
+def is_bug(row):
+    return any(l.lower().strip() in ('bug', 'bugs') for l in row.get('labels', []))
+
+
+def is_enhancement(row):
+    return any(l.lower().strip() in ('enhancement', 'enhancements') for l in row.get('labels', []))
+
+
+def render_group(heading, icon, rows, users, icon_sm, start_index=1, item_name="PRs"):
     if not rows:
         return ''
     body_rows = [render_row(row, users, icon_sm, start_index + idx) for idx, row in enumerate(rows)]
     return f'''    <section class="group">
-      <h2 class="group-heading">{GROUP_ICON[classification]} {html.escape(classification)} <span class="count-badge">{len(rows)}</span></h2>
+      <h2 class="group-heading">{icon} {html.escape(heading)} <span class="count-badge">{len(rows)}</span></h2>
       <table>
         <thead>
           <tr>
@@ -143,7 +160,7 @@ def render_group(classification, rows, users, icon_sm, start_index):
         <tbody>
           <tr class="empty-fortnight-row" style="display: none;">
             <td colspan="7" style="text-align: center; padding: 2rem; color: var(--waffle-base); font-style: italic;">
-              No PRs were found for the last fortnight. Use the links below to pull up older issues.
+              No {item_name} were found for the last fortnight. Use the links below to pull up older {item_name.lower()}.
             </td>
           </tr>
 {chr(10).join(body_rows)}
@@ -160,31 +177,99 @@ def render_html(data, generated_at):
     icon_sm = waffle_icon(size=28, cell_id='row', include_defs=False)
     favicon = waffle_favicon_data_uri()
 
+    # Pull Requests tab
     grouped = {classification: [] for classification in CLASSIFICATION_ORDER}
     for row in rows:
         classification = users.get(row['author'], {}).get('classification', CLASSIFICATION_UNKNOWN)
         grouped.setdefault(classification, []).append(row)
 
     if rows:
-        sections = []
+        pr_sections = []
         current_index = 1
         for classification in CLASSIFICATION_ORDER:
             group_rows = grouped.get(classification, [])
             if not group_rows:
                 continue
-            sections.append(render_group(classification, group_rows, users, icon_sm, current_index))
+            pr_sections.append(render_group(
+                classification,
+                GROUP_ICON[classification],
+                group_rows,
+                users,
+                icon_sm,
+                current_index,
+                item_name="PRs"
+            ))
             current_index += len(group_rows)
-        sections_html = '\n'.join(sections)
-        badge_text = ' · '.join(
+        pr_sections_html = '\n'.join(pr_sections)
+        pr_badge_text = ' · '.join(
             '%d %s' % (len(grouped.get(classification, [])), classification)
             for classification in CLASSIFICATION_ORDER
         )
     else:
-        sections_html = f'''    <div class="empty-plate">
+        pr_sections_html = f'''    <div class="empty-plate">
       {icon_lg}
       <p>No waffles today &mdash; the plate is clean!</p>
     </div>'''
-        badge_text = '0 open on the plate'
+        pr_badge_text = '0 open on the plate'
+
+    # Issues tab
+    issues = data.get('issues', [])
+    good_first_issues = [r for r in issues if is_good_first_issue(r)]
+    bug_issues = [r for r in issues if is_bug(r)]
+    enhancement_issues = [r for r in issues if is_enhancement(r)]
+
+    good_first_issues.sort(key=lambda r: r.get('updated', ''), reverse=True)
+    bug_issues.sort(key=lambda r: r.get('updated', ''), reverse=True)
+    enhancement_issues.sort(key=lambda r: r.get('updated', ''), reverse=True)
+
+    issue_sections = []
+    if good_first_issues:
+        issue_sections.append(render_group(
+            ISSUE_CATEGORY_GOOD_FIRST,
+            ISSUE_GROUP_ICON[ISSUE_CATEGORY_GOOD_FIRST],
+            good_first_issues,
+            users,
+            icon_sm,
+            1,
+            item_name="issues"
+        ))
+    if bug_issues:
+        issue_sections.append(render_group(
+            ISSUE_CATEGORY_BUGS,
+            ISSUE_GROUP_ICON[ISSUE_CATEGORY_BUGS],
+            bug_issues,
+            users,
+            icon_sm,
+            1,
+            item_name="issues"
+        ))
+    if enhancement_issues:
+        issue_sections.append(render_group(
+            ISSUE_CATEGORY_ENHANCEMENTS,
+            ISSUE_GROUP_ICON[ISSUE_CATEGORY_ENHANCEMENTS],
+            enhancement_issues,
+            users,
+            icon_sm,
+            1,
+            item_name="issues"
+        ))
+
+    if issue_sections:
+        issue_sections_html = '\n'.join(issue_sections)
+        issue_badge_text = (
+            f"{len(good_first_issues)} Good First Issue · "
+            f"{len(bug_issues)} Bugs · "
+            f"{len(enhancement_issues)} Enhancements"
+        )
+    else:
+        issue_sections_html = f'''    <div class="empty-plate">
+      {icon_lg}
+      <p>No issues today &mdash; the plate is clean!</p>
+    </div>'''
+        issue_badge_text = '0 open issues'
+
+    total_prs = len(rows)
+    total_issues = len({r['url'] for r in good_first_issues + bug_issues + enhancement_issues})
 
     return f'''<!doctype html>
 <html lang="en">
@@ -492,6 +577,60 @@ def render_html(data, generated_at):
   .pr-tooltip-body a:hover {{
     color: white;
   }}
+  .tab-nav {{
+    display: flex;
+    justify-content: center;
+    gap: 0.85rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0.5rem;
+  }}
+  .tab-btn {{
+    background: rgba(232, 245, 233, 0.15);
+    color: var(--waffle-mist);
+    border: 1px solid rgba(232, 245, 233, 0.4);
+    border-radius: 999px;
+    padding: 0.5rem 1.4rem;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    transition: all 0.2s ease;
+  }}
+  .tab-btn:hover {{
+    background: rgba(232, 245, 233, 0.28);
+    border-color: rgba(255, 255, 255, 0.8);
+    color: white;
+    transform: translateY(-1px);
+  }}
+  .tab-btn.active {{
+    background: white;
+    color: var(--waffle-deep);
+    border-color: white;
+    box-shadow: 0 4px 14px rgba(18, 50, 31, 0.35);
+    transform: translateY(-1px);
+  }}
+  .tab-btn .tab-count {{
+    background: rgba(232, 245, 233, 0.25);
+    color: white;
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }}
+  .tab-btn.active .tab-count {{
+    background: var(--waffle-pale);
+    color: var(--waffle-deep);
+  }}
+  .tab-content {{
+    animation: fadeIn 0.15s ease-in-out;
+  }}
+  @keyframes fadeIn {{
+    from {{ opacity: 0; }}
+    to {{ opacity: 1; }}
+  }}
 </style>
 </head>
 <body>
@@ -518,17 +657,31 @@ def render_html(data, generated_at):
   <div class="hero">
     <div class="hero-icons">{icon_lg}{icon_lg}{icon_lg}</div>
     <h1>The Baffle Board</h1>
-    <p>Unassigned, unlabeled ROS&nbsp;2 &amp; ament pull requests waiting for a reviewer.</p>
+    <p id="hero-subtitle">Unassigned, unlabeled ROS&nbsp;2 &amp; ament pull requests waiting for a reviewer.</p>
     <a href="{repo_url}" target="_blank" rel="noopener" class="repo-link" title="View Source on GitHub">
       <svg class="github-logo" viewBox="0 0 16 16" version="1.1" width="24" height="24" aria-hidden="true" fill="currentColor">
         <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.35 3.12.88.01.64.01 1.11.01 1.28 0 .21-.15.46-.55.38A8.013 8.013 0 0 1 0 8c0-4.42 3.58-8 8-8z"></path>
       </svg>
     </a>
-    <br>
-    <span class="badge">{badge_text}</span>
+    <nav class="tab-nav" aria-label="Dashboard views">
+      <button type="button" class="tab-btn active" data-tab="pull-requests" id="tab-btn-pull-requests">
+        Pull Requests
+        <span class="tab-count">{total_prs}</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="issues" id="tab-btn-issues">
+        Issues
+        <span class="tab-count">{total_issues}</span>
+      </button>
+    </nav>
+    <span class="badge" id="hero-badge">{pr_badge_text}</span>
   </div>
   <main>
-{sections_html}
+    <div class="tab-content" id="tab-pull-requests">
+{pr_sections_html}
+    </div>
+    <div class="tab-content" id="tab-issues" style="display: none;">
+{issue_sections_html}
+    </div>
   </main>
   <footer>
     {icon_sm}{icon_sm}{icon_sm}
@@ -734,6 +887,68 @@ def render_html(data, generated_at):
           return;
         }}
         tooltip.style.display = 'none';
+      }});
+
+      // Tab switching
+      const tabBtns = document.querySelectorAll('.tab-btn');
+      const tabContents = document.querySelectorAll('.tab-content');
+      const heroBadge = document.getElementById('hero-badge');
+      const heroSubtitle = document.getElementById('hero-subtitle');
+
+      const PR_BADGE = {json.dumps(pr_badge_text)};
+      const ISSUE_BADGE = {json.dumps(issue_badge_text)};
+      const PR_SUBTITLE = "Unassigned, unlabeled ROS&nbsp;2 &amp; ament pull requests waiting for a reviewer.";
+      const ISSUE_SUBTITLE = "Open issues across ROS&nbsp;2 &amp; ament categorized by label.";
+
+      function switchTab(tabId) {{
+        tabBtns.forEach(btn => {{
+          if (btn.getAttribute('data-tab') === tabId) {{
+            btn.classList.add('active');
+          }} else {{
+            btn.classList.remove('active');
+          }}
+        }});
+
+        tabContents.forEach(content => {{
+          if (content.id === `tab-${{tabId}}`) {{
+            content.style.display = 'block';
+          }} else {{
+            content.style.display = 'none';
+          }}
+        }});
+
+        if (heroBadge) {{
+          heroBadge.textContent = (tabId === 'issues') ? ISSUE_BADGE : PR_BADGE;
+        }}
+        if (heroSubtitle) {{
+          heroSubtitle.innerHTML = (tabId === 'issues') ? ISSUE_SUBTITLE : PR_SUBTITLE;
+        }}
+
+        if (history.replaceState) {{
+          history.replaceState(null, '', '#' + tabId);
+        }}
+      }}
+
+      tabBtns.forEach(btn => {{
+        btn.addEventListener('click', () => {{
+          const tabId = btn.getAttribute('data-tab');
+          switchTab(tabId);
+        }});
+      }});
+
+      // Check URL hash on load
+      const currentHash = window.location.hash.replace('#', '');
+      if (currentHash === 'issues') {{
+        switchTab('issues');
+      }} else if (currentHash === 'pull-requests') {{
+        switchTab('pull-requests');
+      }}
+
+      window.addEventListener('hashchange', () => {{
+        const hash = window.location.hash.replace('#', '');
+        if (hash === 'issues' || hash === 'pull-requests') {{
+          switchTab(hash);
+        }}
       }});
     }});
   </script>

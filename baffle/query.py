@@ -30,6 +30,7 @@ from github import Auth
 from github import GithubException
 
 from common import DATE_FILE_FORMAT
+from common import ISSUE_CATEGORY_SEARCH_LABELS
 from common import ORGS
 from common import ROS_MAINTAINER_OVERRIDES
 from common import repo_from_url
@@ -78,7 +79,26 @@ def build_search(weeks=None):
     return search
 
 
-def fetch_pull_requests(gh, search):
+def build_issue_search(label_filter, weeks=None):
+    search_terms = []
+    for org in ORGS:
+        search_terms.append('org:' + org)
+    for xrepo in excluded_repos:
+        search_terms.append('-repo:' + xrepo)
+
+    search = ' '.join(search_terms) + ' state:open is:issue archived:false ' + label_filter
+
+    if weeks is not None:
+        today = datetime.date.today()
+        start_delta = datetime.timedelta(weeks=weeks)
+        start_day = today - start_delta
+        updatestring = 'updated:>=%s' % start_day
+        search += ' ' + updatestring
+
+    return search
+
+
+def fetch_items(gh, search):
     rows = []
     for issue in gh.search_issues(search):
         url = issue.html_url
@@ -86,6 +106,7 @@ def fetch_pull_requests(gh, search):
             kind = 'PR'
         else:
             kind = 'Issue'
+        labels = [label.name for label in issue.labels]
         rows.append({
             'repo': repo_from_url(url),
             'title': issue.title,
@@ -95,10 +116,15 @@ def fetch_pull_requests(gh, search):
             'created': issue.created_at.isoformat(),
             'updated': issue.updated_at.isoformat(),
             'body': issue.body or '',
+            'labels': labels,
         })
     # Sort by updated time in descending order (most recently updated first)
     rows.sort(key=lambda r: r['updated'], reverse=True)
     return rows
+
+
+fetch_pull_requests = fetch_items
+fetch_issues = fetch_items
 
 
 def fetch_org_members(gh, orgs):
@@ -112,20 +138,21 @@ def fetch_org_members(gh, orgs):
 
 def fetch_user_stats(gh, username, org_members):
     now = datetime.datetime.now(datetime.timezone.utc)
+    is_maintainer = username in org_members or username in ROS_MAINTAINER_OVERRIDES
     stats = {
         'account_created_at': None,
         'account_age_days': 0,
         'public_pull_requests': 0,
         'public_issues': 0,
         'public_reviews': 0,
-        'is_ros_maintainer': username in org_members or username in ROS_MAINTAINER_OVERRIDES,
-        # True when GitHub excludes this account from its search API (a
-        # flagged/restricted account: the profile still resolves but an
-        # author-qualified search 422s). analyze.py falls back to the
-        # PR-burst heuristic for these users.
+        'is_ros_maintainer': is_maintainer,
         'search_restricted': False,
         'last_updated_at': now.isoformat(),
     }
+
+    # Bots don't need API search calls; they are classified as Bot by username
+    if username.endswith('[bot]'):
+        return stats
 
     try:
         user = gh.get_user(username)
@@ -139,6 +166,10 @@ def fetch_user_stats(gh, username, org_members):
             raise e
         print(f"Warning: failed to fetch profile for user {username}: {e}", file=sys.stderr)
         stats['search_restricted'] = True
+        return stats
+
+    # Known ROS maintainers don't need engagement ratio checks
+    if is_maintainer:
         return stats
 
     # Kept separate from the profile lookup above so a search 422 doesn't
@@ -161,7 +192,7 @@ def data_file_path(site_dir, today):
 
 
 USER_CACHE_FILENAME = 'user_cache.yaml'
-USER_CACHE_EXPIRATION_DAYS = 30
+USER_CACHE_EXPIRATION_DAYS = 180
 
 
 def load_user_cache(site_dir):
@@ -221,11 +252,13 @@ def main():
 
     # Load existing issue cache if it exists
     old_pull_requests = []
+    old_issues = []
     if os.path.exists(out_path):
         try:
             with open(out_path, 'r', encoding='utf-8') as f:
                 old_data = yaml.safe_load(f) or {}
                 old_pull_requests = old_data.get('pull_requests', [])
+                old_issues = old_data.get('issues', [])
         except Exception as e:
             print(f"Warning: failed to load existing issue cache from {out_path}: {e}", file=sys.stderr)
 
@@ -239,7 +272,7 @@ def main():
     gh = Github(auth=auth)
 
     search = build_search(weeks=args.weeks)
-    print("Search:", search)
+    print("Search PRs:", search)
     pull_requests = fetch_pull_requests(gh, search)
     for row in pull_requests:
         print('%s,"%s"' % (row['url'], row['title']))
@@ -272,12 +305,53 @@ def main():
     merged_pull_requests = list(existing_prs.values())
     merged_pull_requests.sort(key=lambda r: r['updated'], reverse=True)
 
+    # Fetch open issues for configured categories
+    fetched_issues_by_url = {}
+    for cat_name, label_filter in ISSUE_CATEGORY_SEARCH_LABELS:
+        issue_search = build_issue_search(label_filter, weeks=args.weeks)
+        print(f"Search issues ({cat_name}):", issue_search)
+        cat_issues = fetch_issues(gh, issue_search)
+        print(f"Found {len(cat_issues)} issues for {cat_name}")
+        for issue in cat_issues:
+            url = issue['url']
+            if url in fetched_issues_by_url:
+                existing = fetched_issues_by_url[url]
+                combined_labels = list(dict.fromkeys(existing.get('labels', []) + issue.get('labels', [])))
+                existing['labels'] = combined_labels
+            else:
+                fetched_issues_by_url[url] = issue
+
+    # Merge existing issues with newly fetched ones
+    existing_issues = {issue['url']: issue for issue in old_issues}
+    fetched_issue_urls = set(fetched_issues_by_url.keys())
+
+    for url, issue in fetched_issues_by_url.items():
+        existing_issues[url] = issue
+
+    if args.weeks is not None:
+        today = datetime.date.today()
+        start_delta = datetime.timedelta(weeks=args.weeks)
+        start_day = today - start_delta
+        start_day_str = start_day.isoformat()
+
+        pruned_issues = {}
+        for url, issue in existing_issues.items():
+            if issue['updated'][:10] >= start_day_str and url not in fetched_issue_urls:
+                continue
+            pruned_issues[url] = issue
+        existing_issues = pruned_issues
+    else:
+        existing_issues = fetched_issues_by_url
+
+    merged_issues = list(existing_issues.values())
+    merged_issues.sort(key=lambda r: r['updated'], reverse=True)
+
     user_cache = load_user_cache(site_dir)
     now = datetime.datetime.now(datetime.timezone.utc)
     cache_updated = False
     org_members = None
 
-    usernames = sorted({row['author'] for row in merged_pull_requests})
+    usernames = sorted({row['author'] for row in merged_pull_requests if row.get('author')})
     users = {}
     for username in usernames:
         cached_user = user_cache.get(username)
@@ -323,6 +397,22 @@ def main():
 
         users[username] = stats
 
+    # Include issue authors in users dictionary without burning rate limits
+    issue_usernames = sorted({row['author'] for row in merged_issues if row.get('author')})
+    for username in issue_usernames:
+        if username not in users:
+            if username in user_cache:
+                users[username] = user_cache[username]
+            else:
+                if org_members is None:
+                    print('Fetching org members for:', ', '.join(ORGS))
+                    org_members = fetch_org_members(gh, ORGS)
+                is_maintainer = (username in org_members) or (username in ROS_MAINTAINER_OVERRIDES)
+                users[username] = {
+                    'is_ros_maintainer': is_maintainer,
+                    'account_age_days': 0,
+                }
+
     if cache_updated:
         save_user_cache(site_dir, user_cache)
 
@@ -330,6 +420,7 @@ def main():
         'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'search': search,
         'pull_requests': merged_pull_requests,
+        'issues': merged_issues,
         'users': users,
     }
 

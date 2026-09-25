@@ -19,7 +19,12 @@ The pipeline is split into three main stages:
    - **AI Attestation**: Examines the PR description to check if the author answered the template's "Did you use Generative AI?" question.
 
 3. **Render** (`baffle/render.py`):
-   Renders the analyzed YAML data into a clean, Bazel-themed static HTML dashboard: **The Baffle Board** (`site/index.html`). PRs are grouped into separate tables based on author classification (Human, Unknown, Bot, AI) to ensure maintainers focus first on genuine human contributions.
+   Renders the analyzed YAML data into a clean, Bazel-themed static HTML dashboard: **The Baffle Board** (`site/index.html`), featuring two tabs:
+   - **Pull Requests**: Pull requests grouped into separate tables based on author classification (`Human`, `Unknown`, `Bot`, `AI`) to prioritize genuine human contributions.
+   - **Issues**: Open issues across the same repositories organized into three tables:
+     1. Issues labeled `good first issue`
+     2. Issues labeled `bugs` (`bug` / `bugs`)
+     3. Issues labeled `enhancements` (`enhancement` / `enhancements`)
 
 ## Setup & Running
 

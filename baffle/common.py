@@ -91,6 +91,29 @@ ATTESTATION_LABEL = {
     ATTESTATION_WARNING: 'Generative AI question missing or left blank',
 }
 
+# Issue tab categories, search label queries, and display icons
+ISSUE_CATEGORY_GOOD_FIRST = 'Good First Issues'
+ISSUE_CATEGORY_BUGS = 'Bugs'
+ISSUE_CATEGORY_ENHANCEMENTS = 'Enhancements'
+ISSUE_CATEGORY_ORDER = [
+    ISSUE_CATEGORY_GOOD_FIRST,
+    ISSUE_CATEGORY_BUGS,
+    ISSUE_CATEGORY_ENHANCEMENTS,
+]
+
+ISSUE_CATEGORY_SEARCH_LABELS = [
+    (ISSUE_CATEGORY_GOOD_FIRST, 'label:"good first issue"'),
+    (ISSUE_CATEGORY_BUGS, 'label:bug,bugs'),
+    (ISSUE_CATEGORY_ENHANCEMENTS, 'label:enhancement,enhancements'),
+]
+
+ISSUE_GROUP_ICON = {
+    ISSUE_CATEGORY_GOOD_FIRST: '&#127793;',   # seedling
+    ISSUE_CATEGORY_BUGS: '&#128027;',         # bug
+    ISSUE_CATEGORY_ENHANCEMENTS: '&#10024;',  # sparkles
+}
+
+
 
 def _find_latest(site_dir, pattern):
     candidates = [
