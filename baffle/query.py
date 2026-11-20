@@ -49,6 +49,8 @@ excluded_repos = [
     'ros2/rclc',
     'ros2/rmw_iceoryx',
     'ros2/ros1_bridge',
+    'ros2/ros2-performance',
+    'ros2/ros2-benchmark-container',
     'ros2/rosbag2',
     'ros2/safety_working_group',
 ]
